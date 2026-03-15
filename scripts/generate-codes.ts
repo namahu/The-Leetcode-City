@@ -55,7 +55,14 @@ async function main() {
     // Validate item exists
     const { data: item } = await sb.from("items").select("id, name").eq("id", itemId).single();
     if (!item) {
-        console.error(`❌ Item "${itemId}" not found in the items table.`);
+        console.error(`\n❌ Item "${itemId}" not found in the database.`);
+        
+        // Fetch and show valid items to help the user
+        const { data: validItems } = await sb.from("items").select("id, name").eq("is_active", true).order("id");
+        if (validItems && validItems.length > 0) {
+            console.log("\n   Available item IDs:");
+            validItems.forEach(i => console.log(`   - ${i.id.padEnd(20)} (${i.name})`));
+        }
         process.exit(1);
     }
 
