@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useMemo, useEffect } from "react";
+import { useRef, useMemo, useState, useEffect } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import { createWindowAtlas, FocusBeacon } from "./Building3D";
@@ -30,6 +30,25 @@ const pseudoRandom = (seed: number) => {
 const wrapAroundCenter = (value: number, center: number) => {
   const wrapped = ((value - center + WEATHER_HALF_AREA) % WEATHER_AREA + WEATHER_AREA) % WEATHER_AREA;
   return center + wrapped - WEATHER_HALF_AREA;
+};
+const createInitialRainState = (centerX: number, centerZ: number) => {
+  const positions = new Float32Array(WEATHER_PARTICLE_COUNT * 3);
+  const speeds = new Float32Array(WEATHER_PARTICLE_COUNT);
+  const anchorX = new Float32Array(WEATHER_PARTICLE_COUNT);
+  const anchorZ = new Float32Array(WEATHER_PARTICLE_COUNT);
+  const respawnCycles = new Uint32Array(WEATHER_PARTICLE_COUNT);
+
+  for (let i = 0; i < WEATHER_PARTICLE_COUNT; i++) {
+    const base = i * 3;
+    anchorX[i] = centerX + (pseudoRandom(i * 3 + 1) - 0.5) * WEATHER_AREA;
+    anchorZ[i] = centerZ + (pseudoRandom(i * 3 + 3) - 0.5) * WEATHER_AREA;
+    positions[base] = anchorX[i];
+    positions[base + 1] = WEATHER_BOTTOM + pseudoRandom(i * 3 + 2) * (WEATHER_TOP - WEATHER_BOTTOM);
+    positions[base + 2] = anchorZ[i];
+    speeds[i] = 120 + pseudoRandom(i * 3 + 4) * 150;
+  }
+
+  return { positions, speeds, anchorX, anchorZ, respawnCycles };
 };
 
 // Pre-allocated temp vector for focus info projection
@@ -101,32 +120,23 @@ interface CitySceneProps {
 function RainWeather() {
   const pointsRef = useRef<THREE.Points>(null);
   const { camera } = useThree();
-  const initialState = useMemo(() => {
-    const positions = new Float32Array(WEATHER_PARTICLE_COUNT * 3);
-    const speeds = new Float32Array(WEATHER_PARTICLE_COUNT);
-    const anchorX = new Float32Array(WEATHER_PARTICLE_COUNT);
-    const anchorZ = new Float32Array(WEATHER_PARTICLE_COUNT);
-    const respawnCycles = new Uint16Array(WEATHER_PARTICLE_COUNT);
-    for (let i = 0; i < WEATHER_PARTICLE_COUNT; i++) {
-      const base = i * 3;
-      anchorX[i] = camera.position.x + (pseudoRandom(i * 3 + 1) - 0.5) * WEATHER_AREA;
-      anchorZ[i] = camera.position.z + (pseudoRandom(i * 3 + 3) - 0.5) * WEATHER_AREA;
-      positions[base] = anchorX[i];
-      positions[base + 1] = WEATHER_BOTTOM + pseudoRandom(i * 3 + 2) * (WEATHER_TOP - WEATHER_BOTTOM);
-      positions[base + 2] = anchorZ[i];
-      speeds[i] = 120 + pseudoRandom(i * 3 + 4) * 150;
-    }
-    return { positions, speeds, anchorX, anchorZ, respawnCycles };
-  }, [camera]);
+  const [initialState] = useState<{
+    positions: Float32Array;
+    speeds: Float32Array;
+    anchorX: Float32Array;
+    anchorZ: Float32Array;
+    respawnCycles: Uint32Array;
+  }>(() => createInitialRainState(camera.position.x, camera.position.z));
+
   const anchorXRef = useRef(initialState.anchorX);
   const anchorZRef = useRef(initialState.anchorZ);
   const respawnCyclesRef = useRef(initialState.respawnCycles);
-  const { positions, speeds } = initialState;
 
   useFrame((state, delta) => {
     const pts = pointsRef.current;
     if (!pts) return;
     const positionArray = (pts.geometry.attributes.position.array as Float32Array);
+    const { speeds } = initialState;
     const anchorX = anchorXRef.current;
     const anchorZ = anchorZRef.current;
     const respawnCycles = respawnCyclesRef.current;
@@ -152,7 +162,7 @@ function RainWeather() {
   return (
     <points ref={pointsRef} frustumCulled={false}>
       <bufferGeometry>
-        <bufferAttribute attach="attributes-position" args={[positions, 3]} />
+        <bufferAttribute attach="attributes-position" args={[initialState.positions, 3]} />
       </bufferGeometry>
       <pointsMaterial color="#a7c7ff" size={4} sizeAttenuation={false} transparent opacity={0.6} depthWrite={false} />
     </points>
